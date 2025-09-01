@@ -10,19 +10,21 @@ Creating a Python-based monthly budgeting application with:
 - Database storage
 
 ## Technology Stack
-- **GUI Framework**: Tkinter (built-in Python library)
+- **GUI Framework**: CustomTkinter (modern, sleek GUI library based on Tkinter)
 - **Database**: SQLite (simple, file-based, no server required)
 - **Authentication**: Custom implementation with bcrypt password hashing
 - **Data Sharing**: UUID-based tokens with permission system
 - **Testing**: pytest for unit tests
+- **Themes**: Built-in dark/light mode support with CustomTkinter
 
 ## Development Phases
 
 ### Phase 1: Foundation ✅
 - [x] Create GitHub repository for budget app
-- [ ] Clone repository locally and set up basic structure
-- [ ] Create tasks/todo.md with comprehensive development plan
-- [ ] Set up Python project files (requirements.txt, .gitignore)
+- [x] Clone repository locally and set up basic structure
+- [x] Create tasks/todo.md with comprehensive development plan
+- [x] Set up Python project files (requirements.txt, .gitignore)
+- [x] Update requirements.txt to include CustomTkinter for modern GUI
 
 ### Phase 2: Database & Core Infrastructure
 - [ ] Choose and configure database technology (SQLite)
@@ -36,23 +38,24 @@ Creating a Python-based monthly budgeting application with:
 - [ ] Create user session management
 - [ ] Implement data isolation between users
 
-### Phase 4: GUI Framework
-- [ ] Create main application window with Tkinter
-- [ ] Design navigation system between sections
-- [ ] Create reusable GUI components
-- [ ] Implement responsive layout system
+### Phase 4: Modern GUI Framework
+- [ ] Create main application window with CustomTkinter
+- [ ] Design modern navigation system with sleek styling
+- [ ] Create reusable CustomTkinter components with consistent theming
+- [ ] Implement responsive layout with dark/light mode support
+- [ ] Set up modern color schemes and typography
 
-### Phase 5: Data Input Features
-- [ ] Build expense input forms with category selection
-- [ ] Create savings input interface
-- [ ] Implement goals tracking input system
-- [ ] Add data validation and error handling
+### Phase 5: Modern Data Input Features
+- [ ] Build modern expense input forms with styled category selection
+- [ ] Create sleek savings input interface with hover effects
+- [ ] Implement goals tracking with progress bars and modern widgets
+- [ ] Add data validation with styled error messages and tooltips
 
-### Phase 6: Overview Dashboard
-- [ ] Create monthly expense summary by category
-- [ ] Implement savings tracking by goal/category
-- [ ] Add overage/underage calculations
-- [ ] Build comparison views (previous/current/next month)
+### Phase 6: Modern Overview Dashboard
+- [ ] Create modern monthly expense summary with styled cards and charts
+- [ ] Implement savings tracking with progress indicators and modern layouts
+- [ ] Add overage/underage calculations with color-coded indicators
+- [ ] Build comparison views with smooth transitions and modern styling
 
 ### Phase 7: Data Sharing & Advanced Features
 - [ ] Implement data sharing mechanism with tokens/secure IDs
