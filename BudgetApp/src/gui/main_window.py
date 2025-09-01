@@ -151,19 +151,17 @@ class MainWindow(ctk.CTk):
     
     def show_login(self):
         """Show the login screen."""
-        try:
-            from .pages.login import LoginFrame
-            login_frame = LoginFrame(self.content_frame, self.on_login_success)
-            login_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
-            self.current_frame = login_frame
-            
-            # Hide navigation until logged in
-            self.navigation_frame.set_enabled(False)
-            self.update_status("Please log in to continue")
-            
-        except ImportError:
-            # Create simple login placeholder
-            self.create_login_placeholder()
+        from .pages.login import LoginFrame
+        login_frame = LoginFrame(self.content_frame, self.on_login_success)
+        login_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=20)
+        self.current_frame = login_frame
+        
+        # Hide navigation until logged in
+        self.navigation_frame.set_enabled(False)
+        self.update_status("Please log in to continue")
+        
+        # Focus first field
+        login_frame.focus_first_field()
     
     def create_login_placeholder(self):
         """Create a simple login placeholder."""
@@ -217,6 +215,7 @@ class MainWindow(ctk.CTk):
         """Handle successful login."""
         self.current_user = user
         self.navigation_frame.set_enabled(True)
+        self.navigation_frame.update_user_info(user.username)
         self.navigate_to("overview")
         self.update_status(f"Welcome, {user.username}!")
     
