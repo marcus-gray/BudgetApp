@@ -5,6 +5,7 @@ Handles user registration, login, password hashing, and session management.
 
 import bcrypt
 import re
+import time
 from typing import Optional, Tuple
 from datetime import datetime
 from ..database.models import User
@@ -21,6 +22,10 @@ class AuthenticationService:
     
     def __init__(self):
         self.current_session = None
+        self.failed_attempts = {}  # Track failed login attempts by username/email
+        self.locked_accounts = {}  # Track locked accounts with timestamps
+        self.max_attempts = 5  # Maximum failed attempts before lockout
+        self.lockout_duration = 900  # Lockout duration in seconds (15 minutes)
         
     def hash_password(self, password: str) -> str:
         """
@@ -187,9 +192,70 @@ class AuthenticationService:
         except Exception as e:
             return False, f"Registration failed: {str(e)}", None
     
+    def is_account_locked(self, identifier: str) -> Tuple[bool, int]:
+        """
+        Check if an account is currently locked.
+        
+        Args:
+            identifier: Username or email to check
+            
+        Returns:
+            Tuple[bool, int]: (is_locked, remaining_lockout_seconds)
+        """
+        if identifier not in self.locked_accounts:
+            return False, 0
+        
+        lock_time = self.locked_accounts[identifier]
+        elapsed = time.time() - lock_time
+        
+        if elapsed >= self.lockout_duration:
+            # Lockout period expired, remove from locked accounts
+            self.unlock_account(identifier)
+            return False, 0
+        
+        remaining = int(self.lockout_duration - elapsed)
+        return True, remaining
+    
+    def unlock_account(self, identifier: str):
+        """
+        Manually unlock an account and reset failed attempts.
+        
+        Args:
+            identifier: Username or email to unlock
+        """
+        if identifier in self.locked_accounts:
+            del self.locked_accounts[identifier]
+        if identifier in self.failed_attempts:
+            del self.failed_attempts[identifier]
+    
+    def record_failed_attempt(self, identifier: str):
+        """
+        Record a failed login attempt and check for lockout.
+        
+        Args:
+            identifier: Username or email that failed
+        """
+        if identifier not in self.failed_attempts:
+            self.failed_attempts[identifier] = 0
+        
+        self.failed_attempts[identifier] += 1
+        
+        # Check if we should lock the account
+        if self.failed_attempts[identifier] >= self.max_attempts:
+            self.locked_accounts[identifier] = time.time()
+    
+    def get_failed_attempts(self, identifier: str) -> int:
+        """Get the number of failed attempts for an identifier."""
+        return self.failed_attempts.get(identifier, 0)
+    
+    def reset_failed_attempts(self, identifier: str):
+        """Reset failed attempts counter after successful login."""
+        if identifier in self.failed_attempts:
+            del self.failed_attempts[identifier]
+
     def login_user(self, username_or_email: str, password: str) -> Tuple[bool, str, Optional[User]]:
         """
-        Authenticate a user login.
+        Authenticate a user login with account lockout protection.
         
         Args:
             username_or_email: Username or email address
@@ -202,17 +268,40 @@ class AuthenticationService:
             if not username_or_email or not password:
                 return False, "Username/email and password are required", None
             
+            # Check if account is locked
+            is_locked, remaining = self.is_account_locked(username_or_email)
+            if is_locked:
+                minutes = remaining // 60
+                seconds = remaining % 60
+                if minutes > 0:
+                    return False, f"Account locked. Try again in {minutes}m {seconds}s", None
+                else:
+                    return False, f"Account locked. Try again in {seconds}s", None
+            
             # Try to find user by username first, then by email
             user = User.get_by_username(username_or_email)
             if not user:
                 user = User.get_by_email(username_or_email)
             
             if not user:
-                return False, "Invalid username/email or password", None
+                self.record_failed_attempt(username_or_email)
+                remaining_attempts = self.max_attempts - self.get_failed_attempts(username_or_email)
+                if remaining_attempts > 0:
+                    return False, f"Invalid credentials. {remaining_attempts} attempts remaining", None
+                else:
+                    return False, "Account locked due to too many failed attempts", None
             
             # Verify password
             if not self.verify_password(password, user.password_hash):
-                return False, "Invalid username/email or password", None
+                self.record_failed_attempt(username_or_email)
+                remaining_attempts = self.max_attempts - self.get_failed_attempts(username_or_email)
+                if remaining_attempts > 0:
+                    return False, f"Invalid credentials. {remaining_attempts} attempts remaining", None
+                else:
+                    return False, "Account locked due to too many failed attempts", None
+            
+            # Successful login - reset failed attempts
+            self.reset_failed_attempts(username_or_email)
             
             # Set current session
             self.current_session = UserSession(user)
