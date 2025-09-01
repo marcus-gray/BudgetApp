@@ -1,0 +1,1 @@
+# Budget App - Modern Python budgeting application
