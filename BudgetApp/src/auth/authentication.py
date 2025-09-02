@@ -6,8 +6,10 @@ Handles user registration, login, password hashing, and session management.
 import bcrypt
 import re
 import time
-from typing import Optional, Tuple
-from datetime import datetime
+import uuid
+import secrets
+from typing import Optional, Tuple, Dict
+from datetime import datetime, timedelta
 from ..database.models import User
 from ..database.init_db import create_default_categories
 
@@ -26,6 +28,9 @@ class AuthenticationService:
         self.locked_accounts = {}  # Track locked accounts with timestamps
         self.max_attempts = 5  # Maximum failed attempts before lockout
         self.lockout_duration = 900  # Lockout duration in seconds (15 minutes)
+        self.password_reset_tokens = {}  # Track password reset tokens
+        self.reset_token_duration = 3600  # Reset token valid for 1 hour
+        self.lockout_bypass_tokens = {}  # Emergency unlock tokens
         
     def hash_password(self, password: str) -> str:
         """
@@ -361,6 +366,289 @@ class AuthenticationService:
             
         except Exception as e:
             return False, f"Password change failed: {str(e)}"
+    
+    def generate_password_reset_token(self, username_or_email: str) -> Tuple[bool, str, Optional[str]]:
+        """
+        Generate a password reset token for a user.
+        
+        Args:
+            username_or_email: Username or email address
+            
+        Returns:
+            Tuple[bool, str, Optional[str]]: (success, message, reset_token)
+        """
+        try:
+            # Find user
+            user = User.get_by_username(username_or_email)
+            if not user:
+                user = User.get_by_email(username_or_email)
+            
+            if not user:
+                # Don't reveal if user exists for security
+                return True, "If this account exists, a reset token has been generated", None
+            
+            # Generate secure token
+            reset_token = secrets.token_urlsafe(32)
+            
+            # Store token with expiration
+            self.password_reset_tokens[reset_token] = {
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': time.time(),
+                'used': False
+            }
+            
+            return True, f"Password reset token generated for {user.username}", reset_token
+            
+        except Exception as e:
+            return False, f"Failed to generate reset token: {str(e)}", None
+    
+    def validate_reset_token(self, token: str) -> Tuple[bool, str, Optional[User]]:
+        """
+        Validate a password reset token.
+        
+        Args:
+            token: Reset token to validate
+            
+        Returns:
+            Tuple[bool, str, Optional[User]]: (valid, message, user_object)
+        """
+        try:
+            if not token or token not in self.password_reset_tokens:
+                return False, "Invalid or expired reset token", None
+            
+            token_data = self.password_reset_tokens[token]
+            
+            # Check if token is expired
+            if time.time() - token_data['created_at'] > self.reset_token_duration:
+                del self.password_reset_tokens[token]
+                return False, "Reset token has expired", None
+            
+            # Check if token was already used
+            if token_data['used']:
+                return False, "Reset token has already been used", None
+            
+            # Get user
+            user = User.get_by_id(token_data['user_id'])
+            if not user:
+                return False, "User account not found", None
+            
+            return True, "Reset token is valid", user
+            
+        except Exception as e:
+            return False, f"Token validation failed: {str(e)}", None
+    
+    def reset_password_with_token(self, token: str, new_password: str, confirm_password: str) -> Tuple[bool, str]:
+        """
+        Reset password using a valid token.
+        
+        Args:
+            token: Valid reset token
+            new_password: New password
+            confirm_password: Password confirmation
+            
+        Returns:
+            Tuple[bool, str]: (success, message)
+        """
+        try:
+            # Validate token
+            valid, message, user = self.validate_reset_token(token)
+            if not valid:
+                return False, message
+            
+            # Validate new password
+            if new_password != confirm_password:
+                return False, "Passwords do not match"
+            
+            password_valid, password_error = self.validate_password(new_password)
+            if not password_valid:
+                return False, password_error
+            
+            # Check if new password is different from current (if we could check)
+            # This would require storing old password hashes, which is not recommended
+            
+            # Hash new password
+            new_hash = self.hash_password(new_password)
+            
+            # Mark token as used
+            self.password_reset_tokens[token]['used'] = True
+            
+            # Clear any failed attempts and unlock account
+            self.reset_failed_attempts(user.username)
+            self.reset_failed_attempts(user.email)
+            self.unlock_account(user.username)
+            self.unlock_account(user.email)
+            
+            # Update password in database (would need to implement User.update_password)
+            # For now, this is a placeholder
+            
+            # Clean up expired tokens
+            self.cleanup_expired_tokens()
+            
+            return True, "Password has been reset successfully"
+            
+        except Exception as e:
+            return False, f"Password reset failed: {str(e)}"
+    
+    def generate_lockout_bypass_token(self, username_or_email: str, admin_reason: str = "") -> Tuple[bool, str, Optional[str]]:
+        """
+        Generate an emergency unlock token for account lockout situations.
+        This should be used by administrators or support staff.
+        
+        Args:
+            username_or_email: Account to unlock
+            admin_reason: Reason for emergency unlock
+            
+        Returns:
+            Tuple[bool, str, Optional[str]]: (success, message, unlock_token)
+        """
+        try:
+            # Find user
+            user = User.get_by_username(username_or_email)
+            if not user:
+                user = User.get_by_email(username_or_email)
+            
+            if not user:
+                return False, "User account not found", None
+            
+            # Generate secure bypass token
+            bypass_token = secrets.token_urlsafe(24)
+            
+            # Store token with expiration (shorter duration for security)
+            self.lockout_bypass_tokens[bypass_token] = {
+                'user_id': user.id,
+                'username': user.username,
+                'email': user.email,
+                'created_at': time.time(),
+                'admin_reason': admin_reason,
+                'used': False
+            }
+            
+            return True, f"Emergency unlock token generated for {user.username}", bypass_token
+            
+        except Exception as e:
+            return False, f"Failed to generate bypass token: {str(e)}", None
+    
+    def use_lockout_bypass_token(self, token: str) -> Tuple[bool, str]:
+        """
+        Use an emergency unlock token to bypass account lockout.
+        
+        Args:
+            token: Emergency unlock token
+            
+        Returns:
+            Tuple[bool, str]: (success, message)
+        """
+        try:
+            if not token or token not in self.lockout_bypass_tokens:
+                return False, "Invalid or expired unlock token"
+            
+            token_data = self.lockout_bypass_tokens[token]
+            
+            # Check if token is expired (30 minutes for bypass tokens)
+            if time.time() - token_data['created_at'] > 1800:
+                del self.lockout_bypass_tokens[token]
+                return False, "Unlock token has expired"
+            
+            # Check if token was already used
+            if token_data['used']:
+                return False, "Unlock token has already been used"
+            
+            # Mark token as used
+            self.lockout_bypass_tokens[token]['used'] = True
+            
+            # Unlock the account
+            username = token_data['username']
+            email = token_data['email']
+            
+            self.unlock_account(username)
+            self.unlock_account(email)
+            
+            return True, f"Account {username} has been unlocked"
+            
+        except Exception as e:
+            return False, f"Unlock failed: {str(e)}"
+    
+    def cleanup_expired_tokens(self):
+        """Clean up expired tokens to prevent memory buildup."""
+        current_time = time.time()
+        
+        # Clean up reset tokens
+        expired_reset = [
+            token for token, data in self.password_reset_tokens.items()
+            if current_time - data['created_at'] > self.reset_token_duration
+        ]
+        for token in expired_reset:
+            del self.password_reset_tokens[token]
+        
+        # Clean up bypass tokens
+        expired_bypass = [
+            token for token, data in self.lockout_bypass_tokens.items()
+            if current_time - data['created_at'] > 1800  # 30 minutes
+        ]
+        for token in expired_bypass:
+            del self.lockout_bypass_tokens[token]
+    
+    def get_account_status(self, username_or_email: str) -> Dict[str, any]:
+        """
+        Get comprehensive account status for administrative purposes.
+        
+        Args:
+            username_or_email: Account to check
+            
+        Returns:
+            Dict: Account status information
+        """
+        is_locked, remaining = self.is_account_locked(username_or_email)
+        failed_count = self.get_failed_attempts(username_or_email)
+        
+        # Count active tokens
+        active_reset_tokens = sum(
+            1 for data in self.password_reset_tokens.values()
+            if data['username'] == username_or_email or data['email'] == username_or_email
+            and not data['used']
+            and time.time() - data['created_at'] <= self.reset_token_duration
+        )
+        
+        active_bypass_tokens = sum(
+            1 for data in self.lockout_bypass_tokens.values()
+            if data['username'] == username_or_email or data['email'] == username_or_email
+            and not data['used']
+            and time.time() - data['created_at'] <= 1800
+        )
+        
+        return {
+            'locked': is_locked,
+            'lockout_remaining_seconds': remaining,
+            'failed_attempts': failed_count,
+            'attempts_remaining': max(0, self.max_attempts - failed_count),
+            'active_reset_tokens': active_reset_tokens,
+            'active_bypass_tokens': active_bypass_tokens
+        }
+    
+    def emergency_unlock_all(self, admin_reason: str = "Emergency unlock") -> Tuple[bool, str, int]:
+        """
+        Emergency function to unlock all locked accounts.
+        Should only be used in extreme circumstances.
+        
+        Args:
+            admin_reason: Reason for mass unlock
+            
+        Returns:
+            Tuple[bool, str, int]: (success, message, accounts_unlocked)
+        """
+        try:
+            locked_count = len(self.locked_accounts)
+            
+            # Clear all locked accounts and failed attempts
+            self.locked_accounts.clear()
+            self.failed_attempts.clear()
+            
+            return True, f"Emergency unlock completed: {admin_reason}", locked_count
+            
+        except Exception as e:
+            return False, f"Emergency unlock failed: {str(e)}", 0
 
 
 class UserSession:

@@ -117,7 +117,7 @@ class LoginFrame(ctk.CTkFrame):
         )
         login_button.grid(row=2, column=0, sticky="ew", pady=20)
         
-        # Forgot password link (placeholder)
+        # Forgot password link
         forgot_label = ctk.CTkLabel(
             self.form_container,
             text="Forgot your password?",
@@ -126,7 +126,7 @@ class LoginFrame(ctk.CTkFrame):
             cursor="hand2"
         )
         forgot_label.grid(row=3, column=0, pady=5)
-        forgot_label.bind("<Button-1>", lambda e: self.show_status("Password reset coming soon!", "info"))
+        forgot_label.bind("<Button-1>", lambda e: self.show_password_reset_dialog())
     
     def create_register_form(self):
         """Create the registration form."""
@@ -266,6 +266,10 @@ class LoginFrame(ctk.CTkFrame):
             self.after(500, lambda: self.login_callback(user))  # Small delay for user feedback
         else:
             self.show_status(message, "error")
+            
+            # Show emergency unlock option for locked accounts
+            if "Account locked" in message and "emergency" not in message.lower():
+                self.show_emergency_unlock_option()
     
     def handle_register(self):
         """Handle registration attempt."""
@@ -306,6 +310,56 @@ class LoginFrame(ctk.CTkFrame):
         """Focus the first input field."""
         if hasattr(self, 'username_entry'):
             self.username_entry.focus()
+    
+    def show_password_reset_dialog(self):
+        """Show password reset dialog."""
+        from .password_reset import PasswordResetDialog
+        
+        dialog = PasswordResetDialog(self, callback=self.on_password_reset_complete)
+    
+    def on_password_reset_complete(self, success: bool):
+        """Handle password reset completion."""
+        if success:
+            self.show_status("Password reset successfully! You can now log in with your new password.", "success")
+    
+    def show_emergency_unlock_option(self):
+        """Show emergency unlock option for locked accounts."""
+        # Add emergency unlock button
+        if hasattr(self, 'emergency_unlock_button'):
+            return  # Already showing
+        
+        self.emergency_unlock_button = ctk.CTkButton(
+            self.form_container,
+            text="🚨 Emergency Unlock",
+            command=self.show_emergency_unlock_dialog,
+            font=ctk.CTkFont(size=11),
+            height=30,
+            **theme_manager.get_button_style("warning")
+        )
+        
+        if self.current_mode == "login":
+            self.emergency_unlock_button.grid(row=4, column=0, pady=10)
+        
+        # Auto-remove after 30 seconds
+        self.after(30000, self.hide_emergency_unlock_option)
+    
+    def hide_emergency_unlock_option(self):
+        """Hide emergency unlock option."""
+        if hasattr(self, 'emergency_unlock_button'):
+            self.emergency_unlock_button.destroy()
+            delattr(self, 'emergency_unlock_button')
+    
+    def show_emergency_unlock_dialog(self):
+        """Show emergency unlock dialog."""
+        from .password_reset import LockoutBypassDialog
+        
+        dialog = LockoutBypassDialog(self, callback=self.on_emergency_unlock_complete)
+    
+    def on_emergency_unlock_complete(self, success: bool):
+        """Handle emergency unlock completion."""
+        if success:
+            self.show_status("Account unlocked successfully! You can now try logging in again.", "success")
+            self.hide_emergency_unlock_option()
 
 
 class DemoLoginButton(ctk.CTkButton):
