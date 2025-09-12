@@ -68,3 +68,17 @@ Thumbs.db
 config.ini
 user_data/
 backups/
+
+# Build and packaging
+build/
+dist/
+*.spec
+assets/
+*.dmg
+*.msi
+*.deb
+*.rpm
+
+# PyInstaller
+*.manifest
+*.spec

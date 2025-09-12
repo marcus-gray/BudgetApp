@@ -60,9 +60,15 @@ pip install -r requirements.txt
 
 ### Running the Application
 
+**From Source:**
 ```bash
 python src/main.py
 ```
+
+**Pre-built Executables:**
+- Download the latest release from [GitHub Releases](https://github.com/marcus-gray/BudgetApp/releases)
+- Extract the ZIP file and run the executable
+- No Python installation required!
 
 The application will:
 - Initialize the SQLite database automatically
@@ -117,6 +123,31 @@ BudgetApp/
 - **Failed Attempt Tracking**: Progressive lockout with attempt counting
 - **Session Management**: Proper authentication state handling
 - **Emergency Recovery**: Administrative bypass for account access
+
+## 📦 Distribution
+
+### Pre-built Executables
+Ready-to-run executables are available for download:
+- **Windows**: `BudgetApp.exe` - No installation required
+- **macOS**: `BudgetApp.app` - Drag to Applications folder
+- Download from [GitHub Releases](https://github.com/marcus-gray/BudgetApp/releases)
+
+### Building from Source
+To create your own executable packages:
+
+```bash
+# Install packaging dependencies
+pip install -r requirements.txt
+
+# Run automated build script
+./build.sh        # macOS/Linux
+build.bat         # Windows
+
+# Or run the Python build script directly
+python build.py
+```
+
+See [PACKAGING.md](PACKAGING.md) for detailed packaging instructions.
 
 ## 🔧 Development
 
